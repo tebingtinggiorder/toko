@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MPT - STORE | Market Place Tebing Tinggi</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<!-- FIREBASE SDK -->
+
+<!-- FIREBASE SDK COMPAT -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
@@ -176,12 +177,12 @@ header {
 
 <div class="bg-floating-container" id="bgFloatBox"></div>
 
-<a href="https://wa.me/6283182938600?text=Halo%20Admin%20MPT%20Store,%20saya%20ingin%20bertanya" target="_blank" class="floating-chat-btn" id="floatingChatBeranda">💬 Hubungi Admin</a>
+<a href="#" id="floatingChatBeranda" target="_blank" class="floating-chat-btn">💬 Hubungi Admin</a>
 
 <!-- LOGIN USER OVERLAY -->
 <div id="userAuthOverlay">
   <div class="auth-card">
-    <h2>🛍️ MPT - STORE</h2>
+    <h2 id="txtShopTitle">🛍️ MPT - STORE</h2>
     <p>Silakan masuk atau buat akun baru untuk mulai belanja</p>
     <div class="auth-tabs">
       <div class="auth-tab active" id="tabLogin" onclick="tukarTabAuth('login')">Masuk</div>
@@ -229,7 +230,7 @@ header {
 
 <header>
   <div class="header-top">
-    <h1 class="header-title" onclick="bukaHalaman('beranda')">🎋 MPT STORE</h1>
+    <h1 class="header-title" id="headerShopName" onclick="bukaHalaman('beranda')">🎋 MPT STORE</h1>
     <div class="nav-actions">
       <button class="btn-nav-user" onclick="bukaHalaman('profil')">👤 Akun <span id="txtUserAktif">User</span></button>
     </div>
@@ -276,7 +277,7 @@ header {
       <button class="btn-float-action btn-float-buy" onclick="bukaModalOrder('Beli (Cash)')">🛒 Beli Cash</button>
       <button class="btn-float-action btn-float-credit" id="btnDetailCredit" onclick="bukaModalOrder('Credit (Angsuran)')">💳 Credit Cicilan</button>
     </div>
-    <a href="https://wa.me/6283182938600?text=Halo%20Admin%20MPT%20Store" target="_blank" class="btn-float-action btn-float-wa">
+    <a href="#" id="btnFloatWaDetail" target="_blank" class="btn-float-action btn-float-wa">
       💬 Tanya / Hubungi Admin WhatsApp
     </a>
   </div>
@@ -354,7 +355,7 @@ header {
     <h3 id="giftBannerTitle" style="margin:0 0 10px 0; color:var(--primary);">🎁 Promo Spesial Pengunjung!</h3>
     <img id="giftBannerImg" src="" class="banner-img" alt="Banner Gift">
     <p id="giftBannerText" style="font-size:13px; color:var(--gray); margin-bottom:15px;">Dapatkan penawaran istimewa untuk belanja hari ini!</p>
-    <button class="btn-auth" id="btnKlaimPromo" onclick="eksekusiKlaimPromo()">Tebing Tinggku 🚀</button>
+    <button class="btn-auth" id="btnKlaimPromo" onclick="eksekusiKlaimPromo()">Klaim Sekarang 🚀</button>
   </div>
 </div>
 
@@ -374,14 +375,16 @@ header {
 </div>
 
 <script>
-// Konfigurasi menggunakan database baru Anda
+// Initializing Firebase sesuai konfigurasi Admin (Source 3)
 const firebaseConfig = {
-  databaseURL: "https://tebingtinggiorder-default-rtdb.asia-southeast1.firebasedatabase.app/"
+    databaseURL: "https://tebingtinggiorder-default-rtdb.asia-southeast1.firebasedatabase.app"
 };
 if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
+    firebase.initializeApp(firebaseConfig);
 }
-const db = firebase.database();
+
+// Gunakan variabel 'database' agar sinkron dengan panel Admin (Source 3)
+const database = firebase.database();
 
 let seluruhProduk = [];
 let kategoriTerpilih = "Semua";
@@ -391,10 +394,10 @@ let tipeOrderAktif = "Beli (Cash)";
 let fotoAktifZoom = "";
 let visitorSessionId = "visitor_" + Math.random().toString(36).substr(2, 9);
 let promoTargetUrl = "";
-let userIpAddress = "127.0.0.1";
+let adminWaNumber = "6283182938600";
 
 window.onload = function() {
-  ambilIPUser();
+  muatPengaturanToko();
   muatProdukDariCacheLokal();
   buatAnimasiFloating();
   catatPengunjungRealtime();
@@ -404,16 +407,22 @@ window.onload = function() {
   dengarkanProdukRealtime();
 };
 
-async function ambilIPUser() {
-  try {
-    let res = await fetch('https://api.ipify.org?format=json');
-    let data = await res.json();
-    if(data && data.ip) {
-      userIpAddress = data.ip;
+// SINKRONISASI PENGATURAN TOKO & WHATSAPP DARI ADMIN (settings)
+function muatPengaturanToko() {
+  database.ref('settings').on('value', (snap) => {
+    if(!snap.exists()) return;
+    const s = snap.val();
+    if(s.namaToko) {
+      document.getElementById('headerShopName').innerText = "🎋 " + s.namaToko;
+      document.getElementById('txtShopTitle').innerText = "🛍️ " + s.namaToko;
     }
-  } catch(e) {
-    userIpAddress = "IP Tidak Terdeteksi";
-  }
+    if(s.whatsapp) {
+      adminWaNumber = s.whatsapp.replace(/[^0-9]/g, '');
+      const waUrl = `https://wa.me/${adminWaNumber}?text=Halo%20Admin%20${encodeURIComponent(s.namaToko || 'Store')},%20saya%20ingin%20bertanya`;
+      document.getElementById('floatingChatBeranda').href = waUrl;
+      document.getElementById('btnFloatWaDetail').href = waUrl;
+    }
+  });
 }
 
 function muatProdukDariCacheLokal() {
@@ -427,8 +436,8 @@ function muatProdukDariCacheLokal() {
 }
 
 function catatPengunjungRealtime() {
-  const refVisitor = db.ref('visitors/' + visitorSessionId);
-  refVisitor.set({ lastActive: Date.now(), device: navigator.userAgent, ip: userIpAddress });
+  const refVisitor = database.ref('visitors/' + visitorSessionId);
+  refVisitor.set({ lastActive: Date.now(), device: navigator.userAgent });
   refVisitor.onDisconnect().remove();
   setInterval(() => { refVisitor.update({ lastActive: Date.now() }); }, 10000);
 }
@@ -460,7 +469,7 @@ function cekSesiUserFast() {
   if(userSaved) {
     currentUser = userSaved;
     document.getElementById('userAuthOverlay').style.display = 'none';
-    document.getElementById('txtUserAktif').innerText = currentUser.userId;
+    document.getElementById('txtUserAktif').innerText = currentUser.userId || currentUser.nama;
     tampilkanBannerGift();
     muatRiwayatPesananUser();
   } else {
@@ -469,7 +478,7 @@ function cekSesiUserFast() {
 }
 
 function tampilkanBannerGift() {
-  db.ref('settings/bannerGift').once('value', (snap) => {
+  database.ref('settings/bannerGift').once('value', (snap) => {
     let b = snap.val();
     if(b && b.active) {
       document.getElementById('giftBannerTitle').innerText = b.title || "🎁 Promo Spesial!";
@@ -488,12 +497,13 @@ function eksekusiKlaimPromo() {
   tutupGiftBanner();
 }
 
+// SINKRON STATUS MAINTENANCE ADMIN (source 1 & 9)
 function dengarkanStatusMaintenance() {
-  db.ref('settings/maintenance').on('value', (snap) => {
-    let m = snap.val();
+  database.ref('settings').on('value', (snap) => {
+    let s = snap.val();
     let ov = document.getElementById('maintenanceOverlay');
-    if(m && m.status) {
-      if(m.image) document.getElementById('imgMaintenance').src = m.image;
+    if(s && (s.maintenance === true || (s.maintenance && s.maintenance.status === true))) {
+      if(s.maintenance.image) document.getElementById('imgMaintenance').src = s.maintenance.image;
       ov.style.display = 'flex';
     } else {
       ov.style.display = 'none';
@@ -522,13 +532,14 @@ function prosesLoginUser() {
     showAlert("User ID dan Password wajib diisi!", "Perhatian", "⚠️");
     return;
   }
-  db.ref('users/' + uId).once('value', (snap) => {
+  database.ref('users/' + uId).once('value', (snap) => {
     let u = snap.val();
     if(u && u.password === pass) {
       currentUser = u;
+      currentUser.userId = uId;
       localStorage.setItem('mpt_user_session', JSON.stringify(currentUser));
       document.getElementById('userAuthOverlay').style.display = 'none';
-      document.getElementById('txtUserAktif').innerText = currentUser.userId;
+      document.getElementById('txtUserAktif').innerText = currentUser.nama || currentUser.userId;
       showAlert("Berhasil masuk ke toko!", "Sukses", "🎉");
       tampilkanBannerGift();
       muatRiwayatPesananUser();
@@ -549,17 +560,17 @@ function prosesRegisterUser() {
     return;
   }
 
-  db.ref('users/' + uId).once('value', (snap) => {
+  database.ref('users/' + uId).once('value', (snap) => {
     if(snap.exists()) {
       showAlert("User ID sudah digunakan, pilih ID lain.", "Perhatian", "⚠️");
     } else {
       let tgl = new Date().toLocaleString('id-ID');
-      let userData = { userId: uId, nama, wa, password: pass, ipDaftar: userIpAddress, waktuDaftar: tgl };
-      db.ref('users/' + uId).set(userData, () => {
+      let userData = { userId: uId, nama, email: wa, role: "customer", active: true, password: pass, waktuDaftar: tgl };
+      database.ref('users/' + uId).set(userData, () => {
         currentUser = userData;
         localStorage.setItem('mpt_user_session', JSON.stringify(currentUser));
         document.getElementById('userAuthOverlay').style.display = 'none';
-        document.getElementById('txtUserAktif').innerText = currentUser.userId;
+        document.getElementById('txtUserAktif').innerText = currentUser.nama;
         showAlert("Akun berhasil dibuat!", "Sukses", "✨");
         tampilkanBannerGift();
       });
@@ -576,8 +587,9 @@ function logoutUser() {
   }, 100);
 }
 
+// SINKRON SIFAT DATA KATEGORI ADMIN (source 7)
 function muatKategori() {
-  db.ref('kategori').on('value', (snap) => {
+  database.ref('kategori').on('value', (snap) => {
     let kats = snap.val() || {};
     let box = document.getElementById('kategoriScrollBox');
     let html = `<div class="category-tab ${kategoriTerpilih==='Semua'?'active':''}" onclick="pilihKategori('Semua')">Semua</div>`;
@@ -598,13 +610,15 @@ function pilihKategori(kat) {
 }
 
 function dengarkanProdukRealtime() {
-  db.ref('produk').on('value', (snap) => {
+  database.ref('produk').on('value', (snap) => {
     let raw = snap.val() || {};
     seluruhProduk = [];
     Object.keys(raw).forEach(k => {
       let item = raw[k];
       item.id = k;
-      seluruhProduk.push(item);
+      if(item.status !== false) {
+        seluruhProduk.push(item);
+      }
     });
     
     seluruhProduk.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
@@ -677,9 +691,8 @@ function bukaHalaman(hal) {
 }
 
 function catatKlikProduk(pId) {
-  let clickRef = db.ref('produk/' + pId + '/clicks').push();
+  let clickRef = database.ref('produk/' + pId + '/clicks').push();
   clickRef.set(Date.now());
-  clickRef.onDisconnect().remove();
 }
 
 function bukaDetailProduk(pId, initialTipe = null) {
@@ -743,7 +756,7 @@ function tutupZoomFoto() { document.getElementById('modalZoomFoto').style.displa
 function muatKomentarProduk(pId) {
   let box = document.getElementById('listKomentarBox');
   box.innerHTML = "Memuat komentar...";
-  db.ref('comments/' + pId).on('value', (snap) => {
+  database.ref('comments/' + pId).on('value', (snap) => {
     let comms = snap.val();
     if(!comms) {
       box.innerHTML = "<p style='color:var(--gray); font-size:12px;'>Belum ada komentar. Jadilah yang pertama berkomentar!</p>";
@@ -768,12 +781,12 @@ function kirimKomentar() {
   if(!produkDetailAktif) return;
 
   let cObj = {
-    user: currentUser ? currentUser.userId : 'Guest',
+    user: currentUser ? (currentUser.nama || currentUser.userId) : 'Guest',
     text: txt,
     waktu: new Date().toLocaleString('id-ID')
   };
 
-  db.ref('comments/' + produkDetailAktif.id).push(cObj, () => {
+  database.ref('comments/' + produkDetailAktif.id).push(cObj, () => {
     document.getElementById('inputKomentar').value = '';
   });
 }
@@ -784,7 +797,7 @@ function bukaModalOrder(tipe) {
   document.getElementById('qtyOrder').value = 1;
   if(currentUser) {
     document.getElementById('custNama').value = currentUser.nama || '';
-    document.getElementById('custWa').value = currentUser.wa || '';
+    document.getElementById('custWa').value = currentUser.email || '';
   }
   hitungTotalOrder();
   document.getElementById('modalOrder').style.display = 'flex';
@@ -799,6 +812,7 @@ function hitungTotalOrder() {
   document.getElementById('txtTotalHargaModal').innerText = "Rp " + total.toLocaleString('id-ID');
 }
 
+// PROSES CHECKOUT DENGAN STRUKTUR DATA ADMIN (source 4 & 8)
 function prosesCheckout() {
   let qty = Number(document.getElementById('qtyOrder').value) || 1;
   let nama = document.getElementById('custNama').value.trim();
@@ -814,40 +828,38 @@ function prosesCheckout() {
   let totalHarga = qty * Number(produkDetailAktif.harga || 0);
   let orderId = "ORD_" + Math.random().toString(36).substr(2, 6).toUpperCase();
 
+  // Struktur disesuaikan secara utuh dengan panel Admin (customerName, total, status, createdAt)
   let orderData = {
     orderId: orderId,
-    timestamp: Date.now(),
+    customerName: nama,
+    customerWa: wa,
+    alamat: alamat,
+    catatan: catatan,
+    total: totalHarga,
+    status: "Pending",
+    createdAt: Date.now(),
     waktu: new Date().toLocaleString('id-ID'),
     tipe: tipeOrderAktif,
     produkId: produkDetailAktif.id,
     namaProduk: produkDetailAktif.nama,
     hargaSatuan: produkDetailAktif.harga,
     qty: qty,
-    totalHarga: totalHarga,
-    ipPemesan: userIpAddress,
-    lokasiBarang: "Dalam Pengemasan",
-    pembeli: {
-      userId: currentUser ? currentUser.userId : 'guest',
-      nama: nama,
-      wa: wa,
-      alamat: alamat,
-      catatan: catatan
-    }
+    userId: currentUser ? (currentUser.userId || currentUser.nama) : 'guest'
   };
 
-  db.ref('orders/' + orderId).set(orderData, () => {
+  database.ref('orders/' + orderId).set(orderData, () => {
     tutupModalOrder();
-    showAlert("Pesanan berhasil dikirim ke Admin toko! Silakan cek menu Akun untuk memantau status lokasi barang.", "Pesanan Sukses", "🚀");
+    showAlert("Pesanan berhasil dikirim ke Admin toko! Silakan cek menu Akun untuk memantau status pesanan.", "Pesanan Sukses", "🚀");
     muatRiwayatPesananUser();
   });
 }
 
 function isiDataProfil() {
   if(!currentUser) return;
-  document.getElementById('profAvatar').innerText = currentUser.userId.charAt(0).toUpperCase();
+  document.getElementById('profAvatar').innerText = (currentUser.nama || currentUser.userId).charAt(0).toUpperCase();
   document.getElementById('profNama').innerText = currentUser.nama || '-';
-  document.getElementById('profUserId').innerText = currentUser.userId;
-  document.getElementById('profWa').innerText = currentUser.wa || '-';
+  document.getElementById('profUserId').innerText = currentUser.userId || '-';
+  document.getElementById('profWa').innerText = currentUser.email || currentUser.wa || '-';
   muatRiwayatPesananUser();
 }
 
@@ -855,7 +867,9 @@ function muatRiwayatPesananUser() {
   let box = document.getElementById('daftarPesananUser');
   if(!currentUser) return;
 
-  db.ref('orders').orderByChild('pembeli/userId').equalTo(currentUser.userId).on('value', (snap) => {
+  let curId = currentUser.userId || currentUser.nama;
+
+  database.ref('orders').orderByChild('userId').equalTo(curId).on('value', (snap) => {
     let orders = snap.val();
     if(!orders) {
       box.innerHTML = "<p style='color:var(--gray); font-size:13px;'>Belum ada riwayat pesanan.</p>";
@@ -870,9 +884,9 @@ function muatRiwayatPesananUser() {
             <span>${o.waktu || ''}</span>
           </div>
           <h4 style="margin:0 0 6px 0; font-size:14px;">${o.namaProduk} (${o.tipe}) x${o.qty}</h4>
-          <div style="font-weight:800; color:var(--primary); margin-bottom:8px;">Rp ${Number(o.totalHarga || 0).toLocaleString('id-ID')}</div>
+          <div style="font-weight:800; color:var(--primary); margin-bottom:8px;">Rp ${Number(o.total || o.totalHarga || 0).toLocaleString('id-ID')}</div>
           <div style="background:#f1f5f9; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:700;">
-            📍 Status Lokasi Barang: <span style="color:var(--credit);">${o.lokasiBarang || 'Dalam Pengemasan'}</span>
+            📍 Status Pesanan: <span style="color:var(--credit);">${o.status || 'Pending'}</span>
           </div>
         </div>
       `;
