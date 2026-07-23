@@ -1,330 +1,520 @@
-<!-- FIREBASE SDK COMPAT (Pastikan versi konsisten) -->
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MPT Store - Tebing Tinggi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Firebase SDK Compat -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <style>
+        :root { --primary: #2563eb; --credit: #d97706; --gray: #64748b; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; margin: 0; padding: 0; }
+        .category-tab { padding: 8px 16px; background: #e2e8f0; border-radius: 20px; cursor: pointer; white-space: nowrap; font-size: 14px; font-weight: 600; color: #475569; transition: all 0.2s; }
+        .category-tab.active { background: var(--primary); color: white; }
+        .card-produk { background: white; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; cursor: pointer; transition: transform 0.2s, shadow 0.2s; display: flex; flex-direction: column; }
+        .card-produk:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .foto-wrapper { position: relative; width: 100%; height: 160px; background: #f1f5f9; }
+        .foto-wrapper img { width: 100%; height: 100%; object-fit: cover; }
+        .badge-layanan { position: absolute; top: 8px; left: 8px; background: rgba(0,0,0,0.6); color: white; font-size: 10px; padding: 3px 8px; border-radius: 6px; font-weight: 700; }
+        .info-produk { padding: 12px; display: flex; flex-direction: column; flex-grow: 1; }
+        .nama-produk { font-size: 14px; font-weight: 700; color: #1e293b; margin: 0 0 6px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .harga { font-size: 15px; font-weight: 800; color: var(--primary); margin-bottom: 4px; }
+        .lokasi-daerah { font-size: 12px; color: var(--gray); margin-bottom: 10px; }
+        .btn-group-card { display: flex; gap: 6px; margin-top: auto; }
+        .btn-card-buy { flex: 1; background: var(--primary); color: white; border: none; padding: 6px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .btn-card-credit { flex: 1; background: var(--credit); color: white; border: none; padding: 6px; border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer; }
+        .btn-card-credit.disabled { background: #cbd5e1; cursor: not-allowed; }
+    </style>
+</head>
+<body>
 
-<script>
-// Konfigurasi Firebase yang disamakan persis dengan Admin (Source 3)
-const firebaseConfig = {
-    apiKey: "AIzaSyAHFgI1sxXMxu9umSfCQMLB2j4C2zH87N8",
-    authDomain: "tebingtinggiorder.firebaseapp.com",
-    databaseURL: "https://tebingtinggiorder-default-rtdb.asia-southeast1.firebasedatabase.app",
-    projectId: "tebingtinggiorder",
-    storageBucket: "tebingtinggiorder.firebasestorage.app",
-    messagingSenderId: "374470707588",
-    appId: "1:374470707588:web:d1fa72f4832753b401f5d1",
-    measurementId: "G-BPKTES3HPY"
-};
+    <!-- Overlay Maintenance -->
+    <div id="maintenanceOverlay" style="display:none; position:fixed; inset:0; background:white; z-index:9999; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:20px;">
+        <img id="imgMaintenance" src="https://via.placeholder.com/250?text=Maintenance" style="max-width:200px; margin-bottom:20px; border-radius:12px;">
+        <h2 style="font-size:22px; font-weight:bold; color:#1e293b; margin-bottom:10px;">Toko Sedang Dalam Pemeliharaan</h2>
+        <p style="color:#64748b; font-size:14px;">Mohon bersabar, toko akan segera dibuka kembali.</p>
+    </div>
 
-// Inisialisasi Firebase Aman dari Double Init
-if (!firebase.apps.length) {
-    firebase.initializeApp(firebaseConfig);
-}
-
-// Inisialisasi Database dan Storage
-const database = firebase.database();
-const storage = firebase.storage();
-
-let seluruhProduk = [];
-let kategoriTerpilih = "Semua";
-let currentUser = null;
-let produkDetailAktif = null;
-let tipeOrderAktif = "Beli (Cash)";
-let fotoAktifZoom = "";
-let visitorSessionId = "visitor_" + Math.random().toString(36).substr(2, 9);
-let promoTargetUrl = "";
-let adminWaNumber = "6283182938600";
-
-window.onload = function() {
-  muatPengaturanToko();
-  buatAnimasiFloating();
-  catatPengunjungRealtime();
-  cekSesiUserFast();
-  dengarkanStatusMaintenance();
-  muatKategori();
-  dengarkanProdukRealtime();
-};
-
-// ==========================================
-// SINKRONISASI PENGATURAN & SETTINGS ADMIN
-// ==========================================
-function muatPengaturanToko() {
-  database.ref('settings').on('value', (snap) => {
-    if(!snap.exists()) return;
-    const s = snap.val();
-    if(s.namaToko) {
-      document.getElementById('headerShopName').innerText = "🎋 " + s.namaToko;
-      document.getElementById('txtShopTitle').innerText = "🛍️ " + s.namaToko;
-    }
-    if(s.whatsapp) {
-      adminWaNumber = s.whatsapp.replace(/[^0-9]/g, '');
-      const waUrl = `https://wa.me/${adminWaNumber}?text=Halo%20Admin%20${encodeURIComponent(s.namaToko || 'Store')},%20saya%20ingin%20bertanya`;
-      document.getElementById('floatingChatBeranda').href = waUrl;
-      document.getElementById('btnFloatWaDetail').href = waUrl;
-    }
-  });
-}
-
-function catatPengunjungRealtime() {
-  const refVisitor = database.ref('visitors/' + visitorSessionId);
-  refVisitor.set({ lastActive: Date.now(), device: navigator.userAgent });
-  refVisitor.onDisconnect().remove();
-  setInterval(() => { refVisitor.update({ lastActive: Date.now() }); }, 10000);
-}
-
-function dengarkanStatusMaintenance() {
-  database.ref('settings').on('value', (snap) => {
-    let s = snap.val();
-    let ov = document.getElementById('maintenanceOverlay');
-    if(s && (s.maintenance === true || (s.maintenance && s.maintenance.status === true))) {
-      if(s.maintenance.image) document.getElementById('imgMaintenance').src = s.maintenance.image;
-      ov.style.display = 'flex';
-    } else {
-      ov.style.display = 'none';
-    }
-  });
-}
-
-// ==========================================
-// KATEGORI & PRODUK REALTIME
-// ==========================================
-function muatKategori() {
-  database.ref('kategori').on('value', (snap) => {
-    let kats = snap.val() || {};
-    let box = document.getElementById('kategoriScrollBox');
-    let html = `<div class="category-tab ${kategoriTerpilih==='Semua'?'active':''}" onclick="pilihKategori('Semua')">Semua</div>`;
-    Object.keys(kats).forEach(kId => {
-      let val = (typeof kats[kId] === 'object') ? kats[kId].nama : kats[kId];
-      if(val) {
-        html += `<div class="category-tab ${kategoriTerpilih===val?'active':''}" onclick="pilihKategori('${val}')">${val}</div>`;
-      }
-    });
-    box.innerHTML = html;
-  });
-}
-
-function pilihKategori(kat) {
-  kategoriTerpilih = kat;
-  muatKategori();
-  renderKatalog();
-}
-
-function dengarkanProdukRealtime() {
-  database.ref('produk').on('value', (snap) => {
-    let raw = snap.val() || {};
-    seluruhProduk = [];
-    Object.keys(raw).forEach(k => {
-      let item = raw[k];
-      item.id = k;
-      // Hanya masukkan produk yang statusnya tidak false (aktif)[cite: 9]
-      if(item.status !== false) {
-        seluruhProduk.push(item);
-      }
-    });
-    
-    seluruhProduk.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    renderKatalog();
-  });
-}
-
-function renderKatalog() {
-  let kw = document.getElementById('kataKunciCari').value.toLowerCase();
-  let lk = document.getElementById('lokasiCari').value.toLowerCase();
-  let container = document.getElementById('katalogProduk');
-
-  let filtered = seluruhProduk.filter(p => {
-    let matchKat = (kategoriTerpilih === 'Semua' || (p.kategori && p.kategori.toLowerCase() === kategoriTerpilih.toLowerCase()));
-    let matchKw = (p.nama && p.nama.toLowerCase().includes(kw));
-    let matchLk = (!lk || (p.lokasi && p.lokasi.toLowerCase().includes(lk)));
-    return matchKat && matchKw && matchLk;
-  });
-
-  if(filtered.length === 0) {
-    container.innerHTML = "<p style='grid-column:span 2; text-align:center; color:var(--gray); padding:30px;'>Tidak ada produk ditemukan.</p>";
-    return;
-  }
-
-  let htmls = filtered.map(p => {
-    let fotoUtama = (p.listFoto && p.listFoto.length > 0) ? p.listFoto[0] : 'https://via.placeholder.com/200x140?text=MPT+Store';
-    let badge = p.layanan || 'COD';
-    let disableCreditClass = p.allowCredit === false ? 'disabled' : '';
-    let creditOnClick = p.allowCredit === false ? '' : `event.stopPropagation(); bukaDetailProduk('${p.id}', 'Credit (Angsuran)')`;
-
-    return `
-      <div class="card-produk" onclick="bukaDetailProduk('${p.id}')">
-        <div class="foto-wrapper">
-          <img src="${fotoUtama}" alt="${p.nama}">
-          <span class="badge-layanan">${badge}</span>
+    <!-- Overlay Auth / Sesi -->
+    <div id="userAuthOverlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:998; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:white; padding:24px; border-radius:16px; width:100%; max-width:360px; text-align:center;">
+            <h3 style="font-weight:bold; font-size:18px; margin-bottom:12px;">Masuk ke MPT Store</h3>
+            <input type="text" id="inputNamaUserLogin" placeholder="Masukkan Nama Anda" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; margin-bottom:12px; font-size:14px;">
+            <input type="text" id="inputWaUserLogin" placeholder="Nomor WhatsApp (Contoh: 0812xxxx)" style="width:100%; padding:10px; border:1px solid #cbd5e1; border-radius:8px; margin-bottom:16px; font-size:14px;">
+            <button onclick="simpanLoginUser()" style="width:100%; background:var(--primary); color:white; border:none; padding:10px; border-radius:8px; font-weight:bold; cursor:pointer;">Mulai Belanja</button>
         </div>
-        <div class="info-produk">
-          <h3 class="nama-produk">${p.nama}</h3>
-          <div class="harga">Rp ${Number(p.harga || 0).toLocaleString('id-ID')}</div>
-          <div class="lokasi-daerah">📍 ${p.lokasi || 'Tebing Tinggi'}</div>
-          <div class="btn-group-card">
-            <button class="btn-card-buy" onclick="event.stopPropagation(); bukaDetailProduk('${p.id}', 'Beli (Cash)')">🛒 Beli</button>
-            <button class="btn-card-credit ${disableCreditClass}" onclick="${creditOnClick}">💳 Credit</button>
-          </div>
+    </div>
+
+    <!-- Halaman Beranda -->
+    <div id="halamanBeranda" style="display:block; padding-bottom:80px;">
+        <header style="background:white; border-bottom:1px solid #e2e8f0; padding:12px 16px; display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:50;">
+            <h1 id="headerShopName" style="font-size:16px; font-weight:bold; color:#1e293b; margin:0;">🎋 MPT Store</h1>
+            <div style="font-size:13px; font-weight:600; color:var(--primary); cursor:pointer;" onclick="bukaHalaman('profil')">👤 <span id="txtUserAktif">Akun</span></div>
+        </header>
+
+        <div style="padding:16px;">
+            <div style="background:linear-gradient(135deg, #2563eb, #1d4ed8); color:white; padding:20px; border-radius:16px; margin-bottom:16px;">
+                <h2 id="txtShopTitle" style="font-size:18px; font-weight:bold; margin:0 0 6px 0;">🛍️ MPT Store Tebing Tinggi</h2>
+                <p style="font-size:13px; margin:0; opacity:0.9;">Temukan produk terbaik dengan layanan cepat & terpercaya.</p>
+            </div>
+
+            <!-- Pencarian -->
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+                <input type="text" id="kataKunciCari" placeholder="Cari produk..." oninput="renderKatalog()" style="flex:1; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+                <input type="text" id="lokasiCari" placeholder="Lokasi..." oninput="renderKatalog()" style="width:100px; padding:10px; border:1px solid #cbd5e1; border-radius:8px; font-size:13px;">
+            </div>
+
+            <!-- Kategori Scroll -->
+            <div id="kategoriScrollBox" style="display:flex; gap:8px; overflow-x:auto; padding-bottom:8px; margin-bottom:16px;">
+                <div class="category-tab active">Semua</div>
+            </div>
+
+            <!-- Grid Katalog Produk -->
+            <div id="katalogProduk" style="display:grid; grid-template-columns: repeat(2, 1fr); gap:12px;">
+                <p style="grid-column:span 2; text-align:center; color:var(--gray); padding:30px;">Memuat produk...</p>
+            </div>
         </div>
-      </div>
-    `;
-  });
+    </div>
 
-  container.innerHTML = htmls.join('');
-}
-
-// ==========================================
-// CHECKOUT & MANAJEMEN TRANSAKSI
-// ==========================================
-function prosesCheckout() {
-  let qty = Number(document.getElementById('qtyOrder').value) || 1;
-  let nama = document.getElementById('custNama').value.trim();
-  let wa = document.getElementById('custWa').value.trim();
-  let alamat = document.getElementById('custAlamat').value.trim();
-  let catatan = document.getElementById('custCatatan').value.trim();
-
-  if(!nama || !wa || !alamat) {
-    showAlert("Nama, Nomor WhatsApp, dan Alamat wajib diisi!", "Perhatian", "⚠️");
-    return;
-  }
-
-  let totalHarga = qty * Number(produkDetailAktif.harga || 0);
-  let orderId = "ORD_" + Math.random().toString(36).substr(2, 6).toUpperCase();
-
-  let orderData = {
-    orderId: orderId,
-    customerName: nama,
-    customerWa: wa,
-    alamat: alamat,
-    catatan: catatan,
-    total: totalHarga,
-    status: "Pending",
-    createdAt: Date.now(),
-    waktu: new Date().toLocaleString('id-ID'),
-    tipe: tipeOrderAktif,
-    produkId: produkDetailAktif.id,
-    namaProduk: produkDetailAktif.nama,
-    hargaSatuan: produkDetailAktif.harga,
-    qty: qty,
-    userId: currentUser ? (currentUser.userId || currentUser.nama) : 'guest'
-  };
-
-  database.ref('orders/' + orderId).set(orderData, () => {
-    tutupModalOrder();
-    showAlert("Pesanan berhasil dikirim ke Admin toko! Silakan cek menu Akun untuk memantau status pesanan.", "Pesanan Sukses", "🚀");
-    muatRiwayatPesananUser();
-  });
-}
-
-function muatRiwayatPesananUser() {
-  let box = document.getElementById('daftarPesananUser');
-  if(!currentUser) return;
-  let curId = currentUser.userId || currentUser.nama;
-
-  database.ref('orders').orderByChild('userId').equalTo(curId).on('value', (snap) => {
-    let orders = snap.val();
-    if(!orders) {
-      box.innerHTML = "<p style='color:var(--gray); font-size:13px;'>Belum ada riwayat pesanan.</p>";
-      return;
-    }
-    let htmls = Object.keys(orders).map(k => {
-      let o = orders[k];
-      return `
-        <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
-          <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; color:var(--gray);">
-            <span>ID: ${k}</span>
-            <span>${o.waktu || ''}</span>
-          </div>
-          <h4 style="margin:0 0 6px 0; font-size:14px;">${o.namaProduk} (${o.tipe}) x${o.qty}</h4>
-          <div style="font-weight:800; color:var(--primary); margin-bottom:8px;">Rp ${Number(o.total || 0).toLocaleString('id-ID')}</div>
-          <div style="background:#f1f5f9; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:700;">
-            📍 Status Pesanan: <span style="color:var(--credit);">${o.status || 'Pending'}</span>
-          </div>
+    <!-- Halaman Detail Produk -->
+    <div id="halamanDetailProduk" style="display:none; padding:16px; padding-bottom:80px;">
+        <button onclick="bukaHalaman('beranda')" style="background:#e2e8f0; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; margin-bottom:12px;">← Kembali</button>
+        <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden; padding:16px;">
+            <div style="width:100%; height:220px; background:#f1f5f9; border-radius:8px; overflow:hidden; position:relative; margin-bottom:12px;">
+                <img id="imgMainDetail" src="" style="width:100%; height:100%; object-fit:cover;">
+                <span id="detailBadgeLayanan" style="position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.6); color:white; font-size:10px; padding:3px 8px; border-radius:6px; font-weight:700;">COD</span>
+            </div>
+            <h2 id="detailNamaProduk" style="font-size:18px; font-weight:bold; margin:0 0 6px 0;">-</h2>
+            <div id="detailHargaProduk" style="font-size:18px; font-weight:800; color:var(--primary); margin-bottom:4px;">Rp 0</div>
+            <div id="detailLokasiProduk" style="font-size:13px; color:var(--gray); margin-bottom:12px;">📍 Tebing Tinggi</div>
+            <p id="detailDeskripsiProduk" style="font-size:13px; color:#475569; line-height:1.5; margin-bottom:20px;">-</p>
+            <div style="display:flex; gap:8px;">
+                <button onclick="bukaModalOrder('Beli (Cash)')" style="flex:1; background:var(--primary); color:white; border:none; padding:10px; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer;">🛒 Beli Cash</button>
+                <button onclick="bukaModalOrder('Credit (Angsuran)')" style="flex:1; background:var(--credit); color:white; border:none; padding:10px; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer;">💳 Ajukan Credit</button>
+            </div>
         </div>
-      `;
-    });
-    box.innerHTML = htmls.join('');
-  });
-}
+    </div>
 
-// Fungsi bantu tambahan pendukung
-function showAlert(pesan, judul = "Pemberitahuan", icon = "✨") {
-  document.getElementById('modalAlertTitle').innerText = judul;
-  document.getElementById('modalAlertText').innerText = pesan;
-  document.getElementById('modalAlertIcon').innerText = icon;
-  document.getElementById('modalAlertCenter').style.display = 'flex';
-}
-function tutupAlertCenter() { document.getElementById('modalAlertCenter').style.display = 'none'; }
-function bukaHalaman(hal) {
-  document.getElementById('halamanBeranda').style.display = 'none';
-  document.getElementById('halamanDetailProduk').style.display = 'none';
-  document.getElementById('halamanProfilUser').style.display = 'none';
-  document.getElementById('floatingChatBeranda').style.display = 'none';
+    <!-- Halaman Profil / Pesanan User -->
+    <div id="halamanProfilUser" style="display:none; padding:16px; padding-bottom:80px;">
+        <button onclick="bukaHalaman('beranda')" style="background:#e2e8f0; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer; margin-bottom:12px;">← Kembali ke Beranda</button>
+        <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin-bottom:16px;">
+            <h3 style="font-weight:bold; font-size:16px; margin:0 0 6px 0;">Profil Pengguna</h3>
+            <p id="txtProfilNama" style="margin:0 0 4px 0; font-size:14px; color:#1e293b; font-weight:600;"></p>
+            <p id="txtProfilWa" style="margin:0; font-size:13px; color:var(--gray);"></p>
+            <button onclick="logoutUser()" style="margin-top:12px; background:#fee2e2; color:#b91c1c; border:none; padding:6px 12px; border-radius:6px; font-weight:bold; font-size:12px; cursor:pointer;">Keluar Akun</button>
+        </div>
+        <h3 style="font-size:15px; font-weight:bold; margin-bottom:10px;">📦 Riwayat Pesanan Anda</h3>
+        <div id="daftarPesananUser">
+            <p style="color:var(--gray); font-size:13px;">Memuat riwayat...</p>
+        </div>
+    </div>
 
-  if(hal === 'beranda') {
-    document.getElementById('halamanBeranda').style.display = 'block';
-    document.getElementById('floatingChatBeranda').style.display = 'flex';
-  } else if(hal === 'detail') {
-    document.getElementById('halamanDetailProduk').style.display = 'block';
-  } else if(hal === 'profil') {
-    document.getElementById('halamanProfilUser').style.display = 'block';
-  }
-  window.scrollTo(0, 0);
-}
-function cekSesiUserFast() {
-  let userSaved = JSON.parse(localStorage.getItem('mpt_user_session'));
-  if(userSaved) {
-    currentUser = userSaved;
-    document.getElementById('userAuthOverlay').style.display = 'none';
-    document.getElementById('txtUserAktif').innerText = currentUser.userId || currentUser.nama;
-    muatRiwayatPesananUser();
-  } else {
-    document.getElementById('userAuthOverlay').style.display = 'flex';
-  }
-}
-function buatAnimasiFloating() {
-  const box = document.getElementById('bgFloatBox');
-  const icons = ['🛍️', '🛒', '📦', '🚚', '💳', '🎁', '⚡'];
-  let items = [];
-  for(let i = 0; i < 12; i++) {
-    items.push(`
-      <div class="bg-item" style="left:${Math.random() * 90}vw; animation-duration:${8 + Math.random() * 10}s; animation-delay:${Math.random() * 5}s;">
-        ${icons[Math.floor(Math.random() * icons.length)]}
-      </div>
-    `);
-  }
-  box.innerHTML = items.join('');
-}
-function bukaDetailProduk(pId, initialTipe = null) {
-  let p = seluruhProduk.find(x => x.id === pId);
-  if(!p) return;
-  produkDetailAktif = p;
-  document.getElementById('detailNamaProduk').innerText = p.nama || '-';
-  document.getElementById('detailHargaProduk').innerText = "Rp " + Number(p.harga || 0).toLocaleString('id-ID');
-  document.getElementById('detailLokasiProduk').innerText = "📍 " + (p.lokasi || 'Tebing Tinggi');
-  document.getElementById('detailBadgeLayanan').innerText = p.layanan || 'READY SIAP ANTAR';
-  document.getElementById('detailDeskripsiProduk').innerText = p.deskripsi || 'Tidak ada deskripsi.';
-  
-  let listFoto = (p.listFoto && p.listFoto.length > 0) ? p.listFoto : ['https://via.placeholder.com/400x320?text=No+Image'];
-  document.getElementById('imgMainDetail').src = listFoto[0];
-  fotoAktifZoom = listFoto[0];
-  bukaHalaman('detail');
-  if(initialTipe) bukaModalOrder(initialTipe);
-}
-function bukaModalOrder(tipe) {
-  tipeOrderAktif = tipe;
-  document.getElementById('modalJudulTipe').innerText = `🛒 Form Pesanan: ${tipe}`;
-  document.getElementById('qtyOrder').value = 1;
-  if(currentUser) {
-    document.getElementById('custNama').value = currentUser.nama || '';
-    document.getElementById('custWa').value = currentUser.email || '';
-  }
-  hitungTotalOrder();
-  document.getElementById('modalOrder').style.display = 'flex';
-}
-function tutupModalOrder() { document.getElementById('modalOrder').style.display = 'none'; }
-function hitungTotalOrder() {
-  let qty = Number(document.getElementById('qtyOrder').value) || 1;
-  let hargaSatuan = produkDetailAktif ? Number(produkDetailAktif.harga || 0) : 0;
-  document.getElementById('txtTotalHargaModal').innerText = "Rp " + (qty * hargaSatuan).toLocaleString('id-ID');
-}
-</script>
+    <!-- Modal Form Checkout / Order -->
+    <div id="modalOrder" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:990; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:white; padding:20px; border-radius:16px; width:100%; max-width:400px; max-height:90vh; overflow-y:auto;">
+            <h3 id="modalJudulTipe" style="font-weight:bold; font-size:16px; margin-bottom:12px;">Form Pesanan</h3>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px; font-weight:600; color:#475569; display:block; margin-bottom:4px;">Jumlah (Qty)</label>
+                <input type="number" id="qtyOrder" value="1" min="1" oninput="hitungTotalOrder()" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px; font-weight:600; color:#475569; display:block; margin-bottom:4px;">Nama Lengkap</label>
+                <input type="text" id="custNama" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px; font-weight:600; color:#475569; display:block; margin-bottom:4px;">Nomor WhatsApp</label>
+                <input type="text" id="custWa" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+            </div>
+            <div style="margin-bottom:10px;">
+                <label style="font-size:12px; font-weight:600; color:#475569; display:block; margin-bottom:4px;">Alamat Pengiriman Lengkap</label>
+                <textarea id="custAlamat" rows="2" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;"></textarea>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="font-size:12px; font-weight:600; color:#475569; display:block; margin-bottom:4px;">Catatan (Opsional)</label>
+                <input type="text" id="custCatatan" style="width:100%; padding:8px; border:1px solid #cbd5e1; border-radius:6px; font-size:13px;">
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; background:#f1f5f9; padding:10px; border-radius:8px;">
+                <span style="font-size:13px; font-weight:600;">Total Harga:</span>
+                <span id="txtTotalHargaModal" style="font-size:16px; font-weight:bold; color:var(--primary);">Rp 0</span>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button onclick="prosesCheckout()" style="flex:1; background:var(--primary); color:white; border:none; padding:10px; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer;">Kirim Pesanan</button>
+                <button onclick="tutupModalOrder()" style="background:#e2e8f0; color:#475569; border:none; padding:10px 14px; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer;">Batal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Chat WA -->
+    <a id="floatingChatBeranda" href="https://wa.me/" target="_blank" style="position:fixed; bottom:20px; right:20px; background:#22c55e; color:white; width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; text-decoration:none; font-size:24px; box-shadow:0 4px 10px rgba(0,0,0,0.2); z-index:40;">💬</a>
+
+    <!-- Modal Alert Center -->
+    <div id="modalAlertCenter" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:999; align-items:center; justify-content:center; padding:20px;">
+        <div style="background:white; padding:20px; border-radius:16px; width:100%; max-width:320px; text-align:center;">
+            <div id="modalAlertIcon" style="font-size:32px; margin-bottom:8px;">✨</div>
+            <h3 id="modalAlertTitle" style="font-weight:bold; font-size:16px; margin-bottom:6px;">Pemberitahuan</h3>
+            <p id="modalAlertText" style="font-size:13px; color:#475569; margin-bottom:16px;"></p>
+            <button onclick="tutupAlertCenter()" style="background:var(--primary); color:white; border:none; padding:8px 20px; border-radius:8px; font-weight:bold; font-size:13px; cursor:pointer; width:100%;">OK</button>
+        </div>
+    </div>
+
+    <!-- Script Utama Terproteksi DOMContentLoaded -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAHFgI1sxXMxu9umSfCQMLB2j4C2zH87N8",
+            authDomain: "tebingtinggiorder.firebaseapp.com",
+            databaseURL: "https://tebingtinggiorder-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "tebingtinggiorder",
+            storageBucket: "tebingtinggiorder.firebasestorage.app",
+            messagingSenderId: "374470707588",
+            appId: "1:374470707588:web:d1fa72f4832753b401f5d1",
+            measurementId: "G-BPKTES3HPY"
+        };
+
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+
+        const database = firebase.database();
+
+        let seluruhProduk = [];
+        let kategoriTerpilih = "Semua";
+        let currentUser = null;
+        let produkDetailAktif = null;
+        let tipeOrderAktif = "Beli (Cash)";
+        let visitorSessionId = "visitor_" + Math.random().toString(36).substr(2, 9);
+        let adminWaNumber = "6283182938600";
+
+        document.addEventListener("DOMContentLoaded", () => {
+            muatPengaturanToko();
+            catatPengunjungRealtime();
+            cekSesiUserFast();
+            dengarkanStatusMaintenance();
+            muatKategori();
+            dengarkanProdukRealtime();
+        });
+
+        function muatPengaturanToko() {
+            database.ref('settings').on('value', (snap) => {
+                if(!snap.exists()) return;
+                const s = snap.val();
+                if(s.namaToko) {
+                    const elHeader = document.getElementById('headerShopName');
+                    const elTitle = document.getElementById('txtShopTitle');
+                    if(elHeader) elHeader.innerText = "🎋 " + s.namaToko;
+                    if(elTitle) elTitle.innerText = "🛍️ " + s.namaToko;
+                }
+                if(s.whatsapp) {
+                    adminWaNumber = s.whatsapp.replace(/[^0-9]/g, '');
+                    const waUrl = `https://wa.me/${adminWaNumber}?text=Halo%20Admin%20${encodeURIComponent(s.namaToko || 'Store')},%20saya%20ingin%20bertanya`;
+                    const elFloat = document.getElementById('floatingChatBeranda');
+                    if(elFloat) elFloat.href = waUrl;
+                }
+            });
+        }
+
+        function catatPengunjungRealtime() {
+            const refVisitor = database.ref('visitors/' + visitorSessionId);
+            refVisitor.set({ lastActive: Date.now(), device: navigator.userAgent });
+            refVisitor.onDisconnect().remove();
+            setInterval(() => { refVisitor.update({ lastActive: Date.now() }); }, 10000);
+        }
+
+        function dengarkanStatusMaintenance() {
+            database.ref('settings').on('value', (snap) => {
+                let s = snap.val();
+                let ov = document.getElementById('maintenanceOverlay');
+                if(!ov) return;
+                if(s && (s.maintenance === true || (s.maintenance && s.maintenance.status === true))) {
+                    if(s.maintenance.image) {
+                        const imgM = document.getElementById('imgMaintenance');
+                        if(imgM) imgM.src = s.maintenance.image;
+                    }
+                    ov.style.display = 'flex';
+                } else {
+                    ov.style.display = 'none';
+                }
+            });
+        }
+
+        function muatKategori() {
+            database.ref('kategori').on('value', (snap) => {
+                let kats = snap.val() || {};
+                let box = document.getElementById('kategoriScrollBox');
+                if(!box) return;
+                let html = `<div class="category-tab ${kategoriTerpilih==='Semua'?'active':''}" onclick="pilihKategori('Semua')">Semua</div>`;
+                Object.keys(kats).forEach(kId => {
+                    let val = (typeof kats[kId] === 'object') ? kats[kId].nama : kats[kId];
+                    if(val) {
+                        html += `<div class="category-tab ${kategoriTerpilih===val?'active':''}" onclick="pilihKategori('${val}')">${val}</div>`;
+                    }
+                });
+                box.innerHTML = html;
+            });
+        }
+
+        function pilihKategori(kat) {
+            kategoriTerpilih = kat;
+            muatKategori();
+            renderKatalog();
+        }
+
+        function dengarkanProdukRealtime() {
+            database.ref('produk').on('value', (snap) => {
+                let raw = snap.val() || {};
+                seluruhProduk = [];
+                Object.keys(raw).forEach(k => {
+                    let item = raw[k];
+                    item.id = k;
+                    if(item.status !== false) {
+                        seluruhProduk.push(item);
+                    }
+                });
+                seluruhProduk.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+                renderKatalog();
+            });
+        }
+
+        function renderKatalog() {
+            let inputKw = document.getElementById('kataKunciCari');
+            let inputLk = document.getElementById('lokasiCari');
+            let container = document.getElementById('katalogProduk');
+            if(!container) return;
+
+            let kw = inputKw ? inputKw.value.toLowerCase() : '';
+            let lk = inputLk ? inputLk.value.toLowerCase() : '';
+
+            let filtered = seluruhProduk.filter(p => {
+                let matchKat = (kategoriTerpilih === 'Semua' || (p.kategori && p.kategori.toLowerCase() === kategoriTerpilih.toLowerCase()));
+                let matchKw = (p.nama && p.nama.toLowerCase().includes(kw));
+                let matchLk = (!lk || (p.lokasi && p.lokasi.toLowerCase().includes(lk)));
+                return matchKat && matchKw && matchLk;
+            });
+
+            if(filtered.length === 0) {
+                container.innerHTML = "<p style='grid-column:span 2; text-align:center; color:var(--gray); padding:30px;'>Tidak ada produk ditemukan.</p>";
+                return;
+            }
+
+            let htmls = filtered.map(p => {
+                let fotoUtama = (p.listFoto && p.listFoto.length > 0) ? p.listFoto[0] : 'https://via.placeholder.com/200x140?text=MPT+Store';
+                let badge = p.layanan || 'COD';
+                let disableCreditClass = p.allowCredit === false ? 'disabled' : '';
+                let creditOnClick = p.allowCredit === false ? '' : `event.stopPropagation(); bukaDetailProduk('${p.id}', 'Credit (Angsuran)')`;
+
+                return `
+                  <div class="card-produk" onclick="bukaDetailProduk('${p.id}')">
+                    <div class="foto-wrapper">
+                      <img src="${fotoUtama}" alt="${p.nama}">
+                      <span class="badge-layanan">${badge}</span>
+                    </div>
+                    <div class="info-produk">
+                      <h3 class="nama-produk">${p.nama}</h3>
+                      <div class="harga">Rp ${Number(p.harga || 0).toLocaleString('id-ID')}</div>
+                      <div class="lokasi-daerah">📍 ${p.lokasi || 'Tebing Tinggi'}</div>
+                      <div class="btn-group-card">
+                        <button class="btn-card-buy" onclick="event.stopPropagation(); bukaDetailProduk('${p.id}', 'Beli (Cash)')">🛒 Beli</button>
+                        <button class="btn-card-credit ${disableCreditClass}" onclick="${creditOnClick}">💳 Credit</button>
+                      </div>
+                    </div>
+                  </div>
+                `;
+            });
+
+            container.innerHTML = htmls.join('');
+        }
+
+        function bukaHalaman(hal) {
+            const hBeranda = document.getElementById('halamanBeranda');
+            const hDetail = document.getElementById('halamanDetailProduk');
+            const hProfil = document.getElementById('halamanProfilUser');
+            const fChat = document.getElementById('floatingChatBeranda');
+
+            if(hBeranda) hBeranda.style.display = 'none';
+            if(hDetail) hDetail.style.display = 'none';
+            if(hProfil) hProfil.style.display = 'none';
+            if(fChat) fChat.style.display = 'none';
+
+            if(hal === 'beranda') {
+                if(hBeranda) hBeranda.style.display = 'block';
+                if(fChat) fChat.style.display = 'flex';
+            } else if(hal === 'detail') {
+                if(hDetail) hDetail.style.display = 'block';
+            } else if(hal === 'profil') {
+                if(hProfil) hProfil.style.display = 'block';
+            }
+            window.scrollTo(0, 0);
+        }
+
+        function cekSesiUserFast() {
+            let userSaved = JSON.parse(localStorage.getItem('mpt_user_session'));
+            if(userSaved) {
+                currentUser = userSaved;
+                const overlay = document.getElementById('userAuthOverlay');
+                const txtAktif = document.getElementById('txtUserAktif');
+                if(overlay) overlay.style.display = 'none';
+                if(txtAktif) txtAktif.innerText = currentUser.userId || currentUser.nama;
+                muatRiwayatPesananUser();
+            } else {
+                const overlay = document.getElementById('userAuthOverlay');
+                if(overlay) overlay.style.display = 'flex';
+            }
+        }
+
+        function simpanLoginUser() {
+            let nama = document.getElementById('inputNamaUserLogin').value.trim();
+            let wa = document.getElementById('inputWaUserLogin').value.trim();
+            if(!nama || !wa) {
+                showAlert("Nama dan Nomor WhatsApp wajib diisi!", "Perhatian", "⚠️");
+                return;
+            }
+            currentUser = { nama: nama, email: wa, userId: "USR_" + Math.random().toString(36).substr(2, 6).toUpperCase() };
+            localStorage.setItem('mpt_user_session', JSON.stringify(currentUser));
+            document.getElementById('userAuthOverlay').style.display = 'none';
+            const txtAktif = document.getElementById('txtUserAktif');
+            if(txtAktif) txtAktif.innerText = currentUser.userId;
+            muatRiwayatPesananUser();
+        }
+
+        function logoutUser() {
+            localStorage.removeItem('mpt_user_session');
+            currentUser = null;
+            location.reload();
+        }
+
+        function bukaDetailProduk(pId, initialTipe = null) {
+            let p = seluruhProduk.find(x => x.id === pId);
+            if(!p) return;
+            produkDetailAktif = p;
+            
+            setelahElemenAda('detailNamaProduk', el => el.innerText = p.nama || '-');
+            setelahElemenAda('detailHargaProduk', el => el.innerText = "Rp " + Number(p.harga || 0).toLocaleString('id-ID'));
+            setelahElemenAda('detailLokasiProduk', el => el.innerText = "📍 " + (p.lokasi || 'Tebing Tinggi'));
+            setelahElemenAda('detailBadgeLayanan', el => el.innerText = p.layanan || 'READY SIAP ANTAR');
+            setelahElemenAda('detailDeskripsiProduk', el => el.innerText = p.deskripsi || 'Tidak ada deskripsi.');
+            
+            let listFoto = (p.listFoto && p.listFoto.length > 0) ? p.listFoto : ['https://via.placeholder.com/400x320?text=No+Image'];
+            setelahElemenAda('imgMainDetail', el => el.src = listFoto[0]);
+
+            bukaHalaman('detail');
+            if(initialTipe) bukaModalOrder(initialTipe);
+        }
+
+        function setelahElemenAda(id, callback) {
+            const el = document.getElementById(id);
+            if(el) callback(el);
+        }
+
+        function bukaModalOrder(tipe) {
+            tipeOrderAktif = tipe;
+            setelahElemenAda('modalJudulTipe', el => el.innerText = `🛒 Form Pesanan: ${tipe}`);
+            setelahElemenAda('qtyOrder', el => el.value = 1);
+            if(currentUser) {
+                setelahElemenAda('custNama', el => el.value = currentUser.nama || '');
+                setelahElemenAda('custWa', el => el.value = currentUser.email || '');
+            }
+            hitungTotalOrder();
+            const m = document.getElementById('modalOrder');
+            if(m) m.style.display = 'flex';
+        }
+
+        function tutupModalOrder() {
+            const m = document.getElementById('modalOrder');
+            if(m) m.style.display = 'none';
+        }
+
+        function hitungTotalOrder() {
+            let qty = Number(document.getElementById('qtyOrder')?.value) || 1;
+            let hargaSatuan = produkDetailAktif ? Number(produkDetailAktif.harga || 0) : 0;
+            setelahElemenAda('txtTotalHargaModal', el => el.innerText = "Rp " + (qty * hargaSatuan).toLocaleString('id-ID'));
+        }
+
+        function prosesCheckout() {
+            let qty = Number(document.getElementById('qtyOrder')?.value) || 1;
+            let nama = document.getElementById('custNama')?.value.trim();
+            let wa = document.getElementById('custWa')?.value.trim();
+            let alamat = document.getElementById('custAlamat')?.value.trim();
+            let catatan = document.getElementById('custCatatan')?.value.trim();
+
+            if(!nama || !wa || !alamat) {
+                showAlert("Nama, Nomor WhatsApp, dan Alamat wajib diisi!", "Perhatian", "⚠️");
+                return;
+            }
+
+            let totalHarga = qty * Number(produkDetailAktif.harga || 0);
+            let orderId = "ORD_" + Math.random().toString(36).substr(2, 6).toUpperCase();
+
+            let orderData = {
+                orderId: orderId,
+                customerName: nama,
+                customerWa: wa,
+                alamat: alamat,
+                catatan: catatan,
+                total: totalHarga,
+                status: "Pending",
+                createdAt: Date.now(),
+                waktu: new Date().toLocaleString('id-ID'),
+                tipe: tipeOrderAktif,
+                produkId: produkDetailAktif.id,
+                namaProduk: produkDetailAktif.nama,
+                hargaSatuan: produkDetailAktif.harga,
+                qty: qty,
+                userId: currentUser ? (currentUser.userId || currentUser.nama) : 'guest'
+            };
+
+            database.ref('orders/' + orderId).set(orderData, () => {
+                tutupModalOrder();
+                showAlert("Pesanan berhasil dikirim ke Admin toko! Silakan cek menu Akun untuk memantau status pesanan.", "Pesanan Sukses", "🚀");
+                muatRiwayatPesananUser();
+            });
+        }
+
+        function muatRiwayatPesananUser() {
+            let box = document.getElementById('daftarPesananUser');
+            if(!box || !currentUser) return;
+            let curId = currentUser.userId || currentUser.nama;
+
+            database.ref('orders').orderByChild('userId').equalTo(curId).on('value', (snap) => {
+                let orders = snap.val();
+                if(!orders) {
+                    box.innerHTML = "<p style='color:var(--gray); font-size:13px;'>Belum ada riwayat pesanan.</p>";
+                    return;
+                }
+                let htmls = Object.keys(orders).map(k => {
+                    let o = orders[k];
+                    return `
+                      <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
+                        <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:6px; color:var(--gray);">
+                          <span>ID: ${k}</span>
+                          <span>${o.waktu || ''}</span>
+                        </div>
+                        <h4 style="margin:0 0 6px 0; font-size:14px;">${o.namaProduk} (${o.tipe}) x${o.qty}</h4>
+                        <div style="font-weight:800; color:var(--primary); margin-bottom:8px;">Rp ${Number(o.total || 0).toLocaleString('id-ID')}</div>
+                        <div style="background:#f1f5f9; padding:8px 10px; border-radius:8px; font-size:12px; font-weight:700;">
+                          📍 Status Pesanan: <span style="color:var(--credit);">${o.status || 'Pending'}</span>
+                        </div>
+                      </div>
+                    `;
+                });
+                box.innerHTML = htmls.join('');
+            });
+        }
+
+        function showAlert(pesan, judul = "Pemberitahuan", icon = "✨") {
+            setelahElemenAda('modalAlertTitle', el => el.innerText = judul);
+            setelahElemenAda('modalAlertText', el => el.innerText = pesan);
+            setelahElemenAda('modalAlertIcon', el => el.innerText = icon);
+            const m = document.getElementById('modalAlertCenter');
+            if(m) m.style.display = 'flex';
+        }
+
+        function tutupAlertCenter() {
+            const m = document.getElementById('modalAlertCenter');
+            if(m) m.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
